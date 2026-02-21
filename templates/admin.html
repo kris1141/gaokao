@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>后台管理</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    <nav class="tabs-nav" aria-label="页面导航">
+      <a class="tabs-link {% if request.path == '/' %}active{% endif %}" href="/">高考分预测</a>
+      <a class="tabs-link {% if request.path.startswith('/mock-convert') %}active{% endif %}" href="/mock-convert">联考换算预测</a>
+      <a class="tabs-link {% if request.path.startswith('/about') %}active{% endif %}" href="/about">About</a>
+      <a class="tabs-link {% if request.path.startswith(admin_path) %}active{% endif %}" href="{{ admin_path }}">后台</a>
+    </nav>
+
+    <section class="hero">
+      <p class="eyebrow">ADMIN PANEL</p>
+      <h1>后台管理</h1>
+      <p class="hero-desc">可上传联考数据、编辑站点公告和 About 页面内容。</p>
+    </section>
+
+    {% if message %}
+    <section class="card {% if message_type == 'error' %}error-card{% endif %}">
+      <p>{{ message }}</p>
+    </section>
+    {% endif %}
+
+    {% if not admin_enabled %}
+    <section class="card error-card">
+      <h2>后台未启用</h2>
+      <p>请先在 Railway 环境变量配置 <code>ADMIN_TOKEN</code>，然后刷新本页。</p>
+    </section>
+    {% elif not authed %}
+    <section class="card admin-block">
+      <h2>后台登录</h2>
+      <form method="post">
+        <input type="hidden" name="action" value="login">
+        <label>
+          <span>后台口令</span>
+          <input type="password" name="admin_token" placeholder="输入 ADMIN_TOKEN">
+        </label>
+        <div class="action-row">
+          <button type="submit">登录后台</button>
+        </div>
+      </form>
+    </section>
+    {% else %}
+    <section class="card admin-block">
+      <h2>联考数据上传</h2>
+      <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="action" value="upload_mock">
+        <div class="grid grid-3">
+          <label>
+            <span>科类</span>
+            <select name="stream">
+              <option value="历史">历史</option>
+              <option value="物理">物理</option>
+            </select>
+          </label>
+          <label>
+            <span>考试名称</span>
+            <input name="mock_label" placeholder="例如 一诊 / 二诊 / 区联考">
+          </label>
+          <label>
+            <span>上传 Excel</span>
+            <input type="file" name="mock_file" accept=".xlsx">
+          </label>
+        </div>
+        <div class="action-row">
+          <button type="submit">上传联考数据</button>
+          <p>文件会保存到 <code>mock_exams</code> 目录并自动刷新数据。</p>
+        </div>
+      </form>
+    </section>
+
+    <section class="card admin-block">
+      <h2>当前联考数据</h2>
+      <div class="admin-list-grid">
+        <div class="admin-list-col">
+          <h3>历史类</h3>
+          {% if hist_mocks %}
+            {% for item in hist_mocks %}
+            <form method="post" class="admin-inline-form">
+              <input type="hidden" name="action" value="delete_mock">
+              <input type="hidden" name="stream" value="历史">
+              <input type="hidden" name="mock_key" value="{{ item.key }}">
+              <span>{{ item.label }}</span>
+              <button type="submit" class="danger-btn">删除</button>
+            </form>
+            {% endfor %}
+          {% else %}
+            <p class="empty">暂无历史联考数据</p>
+          {% endif %}
+        </div>
+        <div class="admin-list-col">
+          <h3>物理类</h3>
+          {% if phys_mocks %}
+            {% for item in phys_mocks %}
+            <form method="post" class="admin-inline-form">
+              <input type="hidden" name="action" value="delete_mock">
+              <input type="hidden" name="stream" value="物理">
+              <input type="hidden" name="mock_key" value="{{ item.key }}">
+              <span>{{ item.label }}</span>
+              <button type="submit" class="danger-btn">删除</button>
+            </form>
+            {% endfor %}
+          {% else %}
+            <p class="empty">暂无物理联考数据</p>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="card admin-block">
+      <h2>站点信息</h2>
+      <form method="post">
+        <input type="hidden" name="action" value="save_site_meta">
+        <label>
+          <span>站点公告（显示在所有页面顶部）</span>
+          <textarea name="notice" rows="3" placeholder="例如：当前为测试版，仅供志愿参考">{{ site_meta.notice }}</textarea>
+        </label>
+        <label>
+          <span>联系信息（可选）</span>
+          <input name="contact" placeholder="例如：微信 xxx / 邮箱 xxx@xx.com" value="{{ site_meta.contact }}">
+        </label>
+        <div class="action-row">
+          <button type="submit">保存站点信息</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card admin-block">
+      <h2>About 页面内容</h2>
+      <form method="post">
+        <input type="hidden" name="action" value="save_about">
+        <label>
+          <span>HTML 内容（可自由编辑）</span>
+          <textarea name="about_content" rows="16">{{ about_content }}</textarea>
+        </label>
+        <div class="action-row">
+          <button type="submit">保存 About 内容</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card admin-block">
+      <form method="post">
+        <input type="hidden" name="action" value="logout">
+        <button type="submit">退出后台</button>
+      </form>
+    </section>
+    {% endif %}
+  </main>
+</body>
+</html>
