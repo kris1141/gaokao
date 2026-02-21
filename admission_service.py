@@ -8,8 +8,9 @@ from typing import Dict, List, Optional, Tuple, Union
 import pandas as pd
 
 
-SAFE_RATIO = 0.90
+SAFE_RATIO = 0.80
 STEADY_RATIO = 1.10
+TIER_DISTRIBUTION = {"冲": 0.25, "稳": 0.45, "保": 0.30}
 
 PROBABILITY_GUIDE = [
     {"min": 0.75, "label": "高把握", "desc": "基本属于保底区间，可优先考虑专业偏好"},
@@ -33,6 +34,12 @@ STREAM_FILES = {
         "score_table": None,
     },
 }
+
+MOCK_SCORE_FILES = {
+    "历史": ["历史类联考一分一段表.xlsx", "历史联考一分一段表.xlsx", "hist_mock.xlsx"],
+    "物理": ["物理类联考一分一段表.xlsx", "物理联考一分一段表.xlsx", "phys_mock.xlsx"],
+}
+MOCK_SCORE_DIR = "mock_exams"
 
 
 def normalize_col(col: str) -> str:
@@ -58,6 +65,35 @@ def resolve_existing_file(base_dir: str, candidates: List[str]) -> str:
         if os.path.exists(path):
             return path
     raise FileNotFoundError(f"未找到数据文件: {', '.join(candidates)}")
+
+
+def resolve_optional_file(base_dir: str, candidates: List[str]) -> Optional[str]:
+    for name in candidates:
+        path = os.path.join(base_dir, name)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def parse_mock_meta_from_filename(filename: str) -> Tuple[str, str]:
+    stem = os.path.splitext(filename)[0]
+    lower_stem = stem.lower()
+    stream = ""
+    if ("历史" in stem) or ("hist" in lower_stem) or ("history" in lower_stem):
+        stream = "历史"
+    elif ("物理" in stem) or ("phys" in lower_stem) or ("physics" in lower_stem):
+        stream = "物理"
+    if not stream:
+        return "", ""
+
+    label = stem
+    label = re.sub(r"(历史类?|物理类?)", "", label)
+    label = re.sub(r"(?i)(history|hist|physics|phys)", "", label)
+    label = re.sub(r"(联考|一分一段表|分数段)", "", label)
+    label = re.sub(r"[_\-\s]+", " ", label).strip()
+    if not label:
+        label = "联考"
+    return stream, label
 
 
 def load_admission(path: str) -> pd.DataFrame:
@@ -156,6 +192,26 @@ def score_to_rank(score: float, score_map: Dict[float, int], top_score: Optional
     return int(score_map[sorted_scores[-1]])
 
 
+def rank_to_score(rank: int, score_map: Dict[float, int]) -> float:
+    if rank <= 0:
+        rank = 1
+    sorted_scores = sorted(score_map.keys(), reverse=True)
+    last_score = sorted_scores[-1]
+    for s in sorted_scores:
+        if int(score_map[s]) >= int(rank):
+            return float(s)
+    return float(last_score)
+
+
+def convert_rank_by_percentile(source_rank: int, source_total: int, target_total: int) -> int:
+    if source_total <= 0 or target_total <= 0:
+        raise ValueError("总人数数据无效，无法进行联考位次换算")
+    ratio = float(source_rank) / float(source_total)
+    ratio = max(1.0 / float(source_total), min(ratio, 1.0))
+    target_rank = int(round(ratio * float(target_total)))
+    return max(1, min(target_rank, int(target_total)))
+
+
 def calc_ratio(user_rank: int, min_rank: int) -> float:
     if min_rank <= 0:
         return 999.0
@@ -171,14 +227,14 @@ def calc_tier(ratio: float) -> str:
 
 
 def calc_probability(ratio: float) -> float:
-    if ratio <= 0.60:
-        p = 0.82
+    if ratio <= 0.65:
+        p = 0.84
     elif ratio <= SAFE_RATIO:
-        p = 0.60 + (SAFE_RATIO - ratio) * (0.22 / 0.30)
+        p = 0.66 + (SAFE_RATIO - ratio) * (0.18 / 0.15)
     elif ratio <= STEADY_RATIO:
-        p = 0.35 + (STEADY_RATIO - ratio) * (0.25 / 0.20)
-    elif ratio <= 1.40:
-        p = 0.15 + (1.40 - ratio) * (0.20 / 0.30)
+        p = 0.40 + (STEADY_RATIO - ratio) * (0.26 / 0.30)
+    elif ratio <= 1.30:
+        p = 0.20 + (1.30 - ratio) * (0.20 / 0.20)
     else:
         p = 0.08
     p = max(0.05, min(0.90, p))
@@ -248,13 +304,101 @@ class AdmissionEngine:
                 score_map, top_score, top_rank = load_score_table(score_path)
             else:
                 score_map, top_score, top_rank = build_rank_map_from_admission_scores(admission_df)
+
+            total_rank = max([int(v) for v in score_map.values()]) if score_map else 0
+            mock_tables = self._load_mock_tables(stream)
+
             ranked_admission = build_ranked_admission(admission_df, score_map, top_score, top_rank)
             self.datasets[stream] = {
                 "admission": ranked_admission,
                 "score_map": score_map,
                 "top_score": top_score,
                 "top_rank": top_rank,
+                "total_rank": total_rank,
+                "mock_tables": mock_tables,
             }
+
+    def _load_mock_tables(self, stream: str) -> Dict[str, Dict[str, object]]:
+        if stream not in {"历史", "物理"}:
+            return {}
+
+        tables: Dict[str, Dict[str, object]] = {}
+        search_dirs = [self.data_dir, os.path.join(self.data_dir, MOCK_SCORE_DIR)]
+        reserved = set()
+        for paths in STREAM_FILES.values():
+            reserved.update(paths.get("admission", []))
+            if paths.get("score_table"):
+                reserved.add(paths["score_table"])
+
+        candidate_paths: List[str] = []
+        for folder in search_dirs:
+            if not os.path.isdir(folder):
+                continue
+            for file in os.listdir(folder):
+                if not file.lower().endswith(".xlsx"):
+                    continue
+                if file in reserved:
+                    continue
+                path = os.path.join(folder, file)
+                candidate_paths.append(path)
+
+        for legacy_name in MOCK_SCORE_FILES.get(stream, []):
+            legacy_path = os.path.join(self.data_dir, legacy_name)
+            if os.path.exists(legacy_path):
+                candidate_paths.append(legacy_path)
+
+        dedup = []
+        seen = set()
+        for path in candidate_paths:
+            norm = os.path.normpath(path)
+            if norm in seen:
+                continue
+            seen.add(norm)
+            dedup.append(path)
+
+        for path in dedup:
+            filename = os.path.basename(path)
+            stream_from_name, label = parse_mock_meta_from_filename(filename)
+            if stream_from_name != stream:
+                continue
+            try:
+                score_map, top_score, top_rank = load_score_table(path)
+            except Exception:
+                continue
+            key = os.path.relpath(path, self.data_dir).replace("\\", "/")
+            total_rank = max([int(v) for v in score_map.values()]) if score_map else 0
+            tables[key] = {
+                "key": key,
+                "label": label,
+                "filename": filename,
+                "path": path,
+                "score_map": score_map,
+                "top_score": top_score,
+                "top_rank": top_rank,
+                "total_rank": total_rank,
+            }
+        return dict(sorted(tables.items(), key=lambda item: item[1]["label"]))
+
+    def get_mock_exam_options(self, stream: str) -> List[Dict[str, str]]:
+        stream = normalize_stream(stream)
+        if stream not in self.datasets:
+            return []
+        tables = self.datasets[stream].get("mock_tables", {})
+        return [{"key": key, "label": data["label"]} for key, data in tables.items()]
+
+    def _resolve_mock_table(self, stream: str, mock_exam_key: str) -> Dict[str, object]:
+        tables = self.datasets[stream].get("mock_tables", {})
+        if not tables:
+            raise ValueError(
+                "未找到联考一分一段表。请在项目目录创建 mock_exams 文件夹，并按 "
+                "'历史_考试名.xlsx' 或 '物理_考试名.xlsx' 命名。"
+            )
+        if mock_exam_key and mock_exam_key in tables:
+            return tables[mock_exam_key]
+        if mock_exam_key and mock_exam_key not in tables:
+            raise ValueError("所选联考数据不存在，请重新选择联考试卷。")
+        first_key = next(iter(tables))
+        return tables[first_key]
 
     def rank_from_input(
         self,
@@ -264,13 +408,19 @@ class AdmissionEngine:
         art_mode: str = "普高",
         art_culture_score: Optional[float] = None,
         art_special_score: Optional[float] = None,
-    ) -> Tuple[int, Optional[float]]:
+        mock_score: Optional[float] = None,
+        mock_rank: Optional[int] = None,
+        mock_exam_key: str = "",
+    ) -> Tuple[int, Optional[float], Dict[str, object]]:
         stream = normalize_stream(stream)
         if stream not in self.datasets:
             raise ValueError("科类仅支持 历史/物理/艺术")
         used_score: Optional[float] = None
+        conversion: Dict[str, object] = {"mode": "direct"}
+        data = self.datasets[stream]
+
         if rank is not None and rank > 0:
-            return int(rank), used_score
+            return int(rank), used_score, conversion
 
         if stream == "艺术":
             if score is not None:
@@ -279,13 +429,49 @@ class AdmissionEngine:
                 if art_culture_score is None or art_special_score is None:
                     raise ValueError("艺术类请填写综合分，或填写文化成绩与艺考成绩")
                 used_score = calc_art_composite(art_mode, float(art_culture_score), float(art_special_score))
+            final_rank = score_to_rank(used_score, data["score_map"], data["top_score"], data["top_rank"])
+            return final_rank, used_score, conversion
         else:
-            if score is None:
-                raise ValueError("请至少输入分数或位次")
-            used_score = float(score)
+            if mock_rank is not None or mock_score is not None:
+                mock_table = self._resolve_mock_table(stream, mock_exam_key)
 
-        data = self.datasets[stream]
-        return score_to_rank(used_score, data["score_map"], data["top_score"], data["top_rank"]), used_score
+                source_rank: Optional[int] = None
+                if mock_rank is not None and mock_rank > 0:
+                    source_rank = int(mock_rank)
+                elif mock_score is not None:
+                    source_rank = score_to_rank(
+                        float(mock_score),
+                        mock_table["score_map"],
+                        mock_table["top_score"],
+                        mock_table["top_rank"],
+                    )
+                if source_rank is None:
+                    raise ValueError("联考换算需输入联考成绩或联考位次")
+
+                source_total = int(mock_table.get("total_rank") or 0)
+                target_total = int(data.get("total_rank") or 0)
+                target_rank = convert_rank_by_percentile(source_rank, source_total, target_total)
+                predicted_score = rank_to_score(target_rank, data["score_map"])
+                final_rank = score_to_rank(predicted_score, data["score_map"], data["top_score"], data["top_rank"])
+                used_score = predicted_score
+                conversion = {
+                    "mode": "mock",
+                    "mock_exam_key": mock_table["key"],
+                    "mock_exam_label": mock_table["label"],
+                    "mock_rank": int(source_rank),
+                    "mock_total": int(source_total),
+                    "gaokao_rank": int(target_rank),
+                    "gaokao_total": int(target_total),
+                    "predicted_score": serialize_score(predicted_score),
+                }
+                return final_rank, used_score, conversion
+
+            if score is not None:
+                used_score = float(score)
+                final_rank = score_to_rank(used_score, data["score_map"], data["top_score"], data["top_rank"])
+                return final_rank, used_score, conversion
+
+            raise ValueError("请至少输入分数、位次或联考成绩")
 
     def recommend(
         self,
@@ -321,22 +507,7 @@ class AdmissionEngine:
         if has_keyword:
             df = df.head(top_n)
         else:
-            rows = []
-            school_count: Dict[str, int] = {}
-            per_school_limit = 2
-            for _, row in df.iterrows():
-                school = str(row["院校名称"])
-                count = school_count.get(school, 0)
-                if count >= per_school_limit:
-                    continue
-                rows.append(row)
-                school_count[school] = count + 1
-                if len(rows) >= top_n:
-                    break
-            if rows:
-                df = pd.DataFrame(rows)
-            else:
-                df = df.head(top_n)
+            df = self._select_by_tier_strategy(df, top_n=top_n, per_school_limit=2)
 
         stats = {"冲": 0, "稳": 0, "保": 0}
         for tier, count in df["分档"].value_counts().to_dict().items():
@@ -362,6 +533,69 @@ class AdmissionEngine:
                 }
             )
         return rows, stats
+
+    def _select_by_tier_strategy(self, ranked_df: pd.DataFrame, top_n: int, per_school_limit: int) -> pd.DataFrame:
+        if ranked_df.empty:
+            return ranked_df
+
+        desired = self._build_tier_targets(top_n)
+        tier_order = ["冲", "稳", "保"]
+
+        tier_frames: Dict[str, pd.DataFrame] = {}
+        for tier in tier_order:
+            tier_df = ranked_df[ranked_df["分档"] == tier].sort_values(
+                by=["贴合度", "概率", "最低位次"], ascending=[True, False, True]
+            )
+            tier_frames[tier] = tier_df
+
+        full_sorted = ranked_df.sort_values(by=["贴合度", "概率", "最低位次"], ascending=[True, False, True])
+        selected_idx: List[int] = []
+        selected_set = set()
+        school_count: Dict[str, int] = {}
+
+        def pick_from(frame: pd.DataFrame, need: int, enforce_school_limit: bool = True) -> None:
+            if need <= 0:
+                return
+            for idx, row in frame.iterrows():
+                if len(selected_idx) >= top_n:
+                    break
+                if idx in selected_set:
+                    continue
+                school = str(row["院校名称"])
+                if enforce_school_limit and school_count.get(school, 0) >= per_school_limit:
+                    continue
+                selected_idx.append(idx)
+                selected_set.add(idx)
+                school_count[school] = school_count.get(school, 0) + 1
+                need -= 1
+                if need <= 0:
+                    break
+
+        for tier in tier_order:
+            pick_from(tier_frames[tier], desired[tier], enforce_school_limit=True)
+
+        if len(selected_idx) < top_n:
+            pick_from(full_sorted, top_n - len(selected_idx), enforce_school_limit=True)
+
+        if len(selected_idx) < top_n:
+            pick_from(full_sorted, top_n - len(selected_idx), enforce_school_limit=False)
+
+        if not selected_idx:
+            return ranked_df.head(top_n)
+        return ranked_df.loc[selected_idx]
+
+    @staticmethod
+    def _build_tier_targets(top_n: int) -> Dict[str, int]:
+        targets = {tier: int(top_n * ratio) for tier, ratio in TIER_DISTRIBUTION.items()}
+        remain = top_n - sum(targets.values())
+        fill_order = ["稳", "保", "冲"]
+        idx = 0
+        while remain > 0:
+            tier = fill_order[idx % len(fill_order)]
+            targets[tier] += 1
+            remain -= 1
+            idx += 1
+        return targets
 
     def parse_wishlist_text(self, text: str) -> List[Dict[str, str]]:
         items: List[Dict[str, str]] = []

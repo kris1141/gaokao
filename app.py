@@ -39,6 +39,20 @@ def score_display(value: Optional[float]):
     return round(value, 2)
 
 
+def build_recommendation(stream: str, user_rank: int, form: dict):
+    top_n = to_int(form.get("top_n", "")) or 50
+    top_n = max(10, min(top_n, 200))
+    recommendations, tier_stats = engine.recommend(
+        stream=stream,
+        user_rank=user_rank,
+        school_keyword=form.get("school_keyword", ""),
+        major_keyword=form.get("major_keyword", ""),
+        region_keyword=form.get("region_keyword", ""),
+        top_n=top_n,
+    )
+    return recommendations, tier_stats
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     form = {
@@ -68,7 +82,7 @@ def index():
             rank = to_int(form["rank"])
             art_culture_score = to_optional_float(form["art_culture_score"])
             art_special_score = to_optional_float(form["art_special_score"])
-            user_rank, used_score = engine.rank_from_input(
+            user_rank, used_score, _ = engine.rank_from_input(
                 stream=stream,
                 score=score,
                 rank=rank,
@@ -77,17 +91,7 @@ def index():
                 art_special_score=art_special_score,
             )
 
-            top_n = to_int(form["top_n"]) or 50
-            top_n = max(10, min(top_n, 200))
-
-            recommendations, tier_stats = engine.recommend(
-                stream=stream,
-                user_rank=user_rank,
-                school_keyword=form["school_keyword"],
-                major_keyword=form["major_keyword"],
-                region_keyword=form["region_keyword"],
-                top_n=top_n,
-            )
+            recommendations, tier_stats = build_recommendation(stream, user_rank, form)
 
             result = {
                 "stream": stream,
@@ -112,6 +116,73 @@ def index():
             error = str(exc)
 
     return render_template("index.html", form=form, result=result, error=error)
+
+
+@app.route("/mock-convert", methods=["GET", "POST"])
+def mock_convert():
+    form = {
+        "stream": "历史",
+        "mock_exam_key": "",
+        "mock_score": "",
+        "mock_rank": "",
+        "top_n": "50",
+        "school_keyword": "",
+        "major_keyword": "",
+        "region_keyword": "",
+    }
+    mock_options = engine.get_mock_exam_options(form["stream"])
+    result = None
+    error = ""
+
+    if request.method == "POST":
+        for key in form.keys():
+            form[key] = request.form.get(key, form[key]).strip()
+
+        try:
+            stream = normalize_stream(form["stream"])
+            if stream not in {"历史", "物理"}:
+                raise ValueError("联考换算仅支持 历史/物理")
+            mock_options = engine.get_mock_exam_options(stream)
+
+            mock_score = to_optional_float(form["mock_score"])
+            mock_rank = to_int(form["mock_rank"])
+            user_rank, used_score, conversion = engine.rank_from_input(
+                stream=stream,
+                score=None,
+                rank=None,
+                mock_score=mock_score,
+                mock_rank=mock_rank,
+                mock_exam_key=form["mock_exam_key"],
+            )
+
+            recommendations, tier_stats = build_recommendation(stream, user_rank, form)
+
+            result = {
+                "stream": stream,
+                "used_score": used_score,
+                "used_score_display": score_display(used_score),
+                "mock_score_display": score_display(mock_score),
+                "mock_rank": mock_rank,
+                "user_rank": user_rank,
+                "conversion": conversion,
+                "has_keyword_search": bool(
+                    form["school_keyword"]
+                    or form["major_keyword"]
+                    or form["region_keyword"]
+                ),
+                "recommendations": recommendations,
+                "tier_stats": tier_stats,
+                "probability_guide": PROBABILITY_GUIDE,
+            }
+        except Exception as exc:
+            error = str(exc)
+
+    return render_template("mock_convert.html", form=form, result=result, error=error, mock_options=mock_options)
+
+
+@app.route("/about", methods=["GET"])
+def about():
+    return render_template("about.html")
 
 
 @app.route("/reload", methods=["POST"])
