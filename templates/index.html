@@ -8,7 +8,11 @@
 </head>
 <body>
   <main class="page">
-    {% include '_tabs.html' %}
+    <nav class="tabs-nav" aria-label="页面导航">
+      <a class="tabs-link {% if request.path == '/' %}active{% endif %}" href="/">高考分预测</a>
+      <a class="tabs-link {% if request.path.startswith('/mock-convert') %}active{% endif %}" href="/mock-convert">联考换算预测</a>
+      <a class="tabs-link {% if request.path.startswith('/about') %}active{% endif %}" href="/about">About</a>
+    </nav>
     <section class="hero">
       <p class="eyebrow">CHONGQING · GAOKAO · 2025 DATA</p>
       <h1>重庆高考录取预测系统</h1>
@@ -94,14 +98,14 @@
     </section>
 
     {% if error %}
-    <section class="card error-card">
+    <section class="card error-card" id="result-anchor">
       <h2>输入错误</h2>
       <p>{{ error }}</p>
     </section>
     {% endif %}
 
     {% if result %}
-    <section class="card">
+    <section class="card" id="result-anchor">
       <div class="card-head">
         <h2>结果总览</h2>
       </div>
@@ -267,6 +271,7 @@
       const tierButtons = document.querySelectorAll("[data-tier-filter]");
       const tierRows = document.querySelectorAll("tr[data-tier]");
       const tierStatus = document.getElementById("tier-filter-status");
+      const shouldAutoScroll = {{ "true" if (result or error) else "false" }};
 
       function applyTierFilter(tier) {
         let visibleCount = 0;
@@ -294,6 +299,12 @@
       });
       if (tierButtons.length && tierRows.length) {
         applyTierFilter("全部");
+      }
+      if (shouldAutoScroll) {
+        const anchor = document.getElementById("result-anchor");
+        if (anchor) {
+          anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
       }
     })();
   </script>
