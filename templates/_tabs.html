@@ -1,0 +1,5 @@
+<nav class="tabs-nav" aria-label="页面导航">
+  <a class="tabs-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">高考分预测</a>
+  <a class="tabs-link {% if request.endpoint == 'mock_convert' %}active{% endif %}" href="{{ url_for('mock_convert') }}">联考换算预测</a>
+  <a class="tabs-link {% if request.endpoint == 'about' %}active{% endif %}" href="{{ url_for('about') }}">About</a>
+</nav>

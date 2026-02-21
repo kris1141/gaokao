@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>联考换算与录取预测</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    {% include '_tabs.html' %}
+    <section class="hero">
+      <p class="eyebrow">MOCK EXAM · RANK CONVERSION</p>
+      <h1>联考换算预测页</h1>
+      <p class="hero-desc">输入联考成绩或联考位次，自动换算高考定位，再给出冲稳保志愿推荐。</p>
+      <div class="hero-tags">
+        <span>联考成绩</span>
+        <span>位次换算</span>
+        <span>录取预测</span>
+      </div>
+      <div class="hero-grid">
+        <div><p>核心方法</p><strong>位次百分位映射</strong></div>
+        <div><p>适用科类</p><strong>历史 / 物理</strong></div>
+        <div><p>输出结果</p><strong>高考分 + 推荐</strong></div>
+      </div>
+    </section>
+
+    <section class="card form-card">
+      <div class="card-head">
+        <h2>联考换算参数</h2>
+        <p>填写联考成绩或联考位次（二选一即可），系统自动换算到高考一分一段定位。</p>
+      </div>
+      <form method="post">
+        <div class="grid grid-3">
+          <label>
+            <span>科类</span>
+            <select name="stream">
+              <option value="历史" {% if form.stream == "历史" %}selected{% endif %}>历史类</option>
+              <option value="物理" {% if form.stream == "物理" %}selected{% endif %}>物理类</option>
+            </select>
+          </label>
+          <label>
+            <span>联考试卷</span>
+            <select name="mock_exam_key" {% if not mock_options %}disabled{% endif %}>
+              {% if mock_options %}
+                {% for option in mock_options %}
+                  <option value="{{ option.key }}" {% if form.mock_exam_key == option.key %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+              {% else %}
+                <option value="">未识别到联考数据文件</option>
+              {% endif %}
+            </select>
+          </label>
+          <label>
+            <span>联考成绩（可选）</span>
+            <input name="mock_score" type="number" step="0.01" placeholder="例如 495.5" value="{{ form.mock_score }}">
+          </label>
+          <label>
+            <span>联考位次（可选）</span>
+            <input name="mock_rank" type="number" placeholder="例如 8500" value="{{ form.mock_rank }}">
+          </label>
+          <label>
+            <span>推荐条数</span>
+            <input name="top_n" type="number" min="10" max="200" value="{{ form.top_n }}">
+          </label>
+          <label>
+            <span>院校关键词</span>
+            <input name="school_keyword" placeholder="例如 重庆大学" value="{{ form.school_keyword }}">
+          </label>
+          <label>
+            <span>专业关键词</span>
+            <input name="major_keyword" placeholder="例如 计算机" value="{{ form.major_keyword }}">
+          </label>
+          <label class="span-3">
+            <span>地域关键词（按院校名筛选）</span>
+            <input name="region_keyword" placeholder="例如 北京 / 上海" value="{{ form.region_keyword }}">
+          </label>
+        </div>
+        <div class="action-row">
+          <button type="submit">联考换算并预测</button>
+          <p>提示：优先使用联考位次；若未填位次则使用联考成绩自动算位次。</p>
+        </div>
+      </form>
+      <p class="formula-note">
+        联考文件命名建议：放在 <code>mock_exams</code> 目录，使用 <code>历史_一诊.xlsx</code> / <code>物理_一诊.xlsx</code> 格式。
+      </p>
+    </section>
+
+    {% if error %}
+    <section class="card error-card">
+      <h2>输入错误</h2>
+      <p>{{ error }}</p>
+    </section>
+    {% endif %}
+
+    {% if result %}
+    <section class="card">
+      <div class="card-head">
+        <h2>换算结果</h2>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi">
+          <p class="kpi-label">科类</p>
+          <p class="kpi-value">{{ result.stream }}</p>
+        </div>
+        <div class="kpi">
+          <p class="kpi-label">联考位次</p>
+          <p class="kpi-value">{{ result.conversion.mock_rank }}</p>
+        </div>
+        <div class="kpi">
+          <p class="kpi-label">等效高考分</p>
+          <p class="kpi-value">{{ result.used_score_display if result.used_score_display is not none else "-" }}</p>
+        </div>
+        <div class="kpi">
+          <p class="kpi-label">等效高考位次</p>
+          <p class="kpi-value">{{ result.user_rank }}</p>
+        </div>
+        <div class="kpi">
+          <p class="kpi-label">模式</p>
+          <p class="kpi-value">联考换算</p>
+        </div>
+      </div>
+      <p class="conversion-note">
+        联考试卷：{{ result.conversion.mock_exam_label }}
+        <br>
+        联考位次 {{ result.conversion.mock_rank }}/{{ result.conversion.mock_total }}
+        → 高考等效位次 {{ result.conversion.gaokao_rank }}/{{ result.conversion.gaokao_total }}
+        → 预测高考分 {{ result.conversion.predicted_score }}
+      </p>
+      <div class="tier-row">
+        <button type="button" class="tier-filter active" data-tier-filter="全部" aria-pressed="true">全部 {{ result.recommendations|length }}</button>
+        <button type="button" class="tier-filter crash" data-tier-filter="冲" aria-pressed="false">冲 {{ result.tier_stats["冲"] }}</button>
+        <button type="button" class="tier-filter steady" data-tier-filter="稳" aria-pressed="false">稳 {{ result.tier_stats["稳"] }}</button>
+        <button type="button" class="tier-filter safe" data-tier-filter="保" aria-pressed="false">保 {{ result.tier_stats["保"] }}</button>
+      </div>
+      <p class="tier-filter-status" id="tier-filter-status">当前显示：全部</p>
+      <div class="prob-guide">
+        {% for item in result.probability_guide %}
+        <div class="guide-item">
+          <p>{{ "%.0f%%"|format(item.min * 100) }}+</p>
+          <strong>{{ item.label }}</strong>
+          <span>{{ item.desc }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>智能推荐列表</h2>
+        <p>已按换算后的高考位次进行推荐。</p>
+      </div>
+      {% if result.recommendations %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>院校代码</th>
+              <th>院校名称</th>
+              <th>专业代码</th>
+              <th>专业名称</th>
+              <th>最低分</th>
+              <th>最低位次</th>
+              <th>位次比</th>
+              <th>分档</th>
+              <th>概率</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for row in result.recommendations %}
+            <tr data-tier="{{ row.tier }}">
+              <td data-label="院校代码">{{ row.school_code }}</td>
+              <td data-label="院校名称">{{ row.school_name }}</td>
+              <td data-label="专业代码">{{ row.major_code }}</td>
+              <td data-label="专业名称">{{ row.major_name }}</td>
+              <td data-label="最低分">{{ row.min_score }}</td>
+              <td data-label="最低位次">{{ row.min_rank }}</td>
+              <td data-label="位次比">{{ "%.4f"|format(row.rank_ratio) }}</td>
+              <td data-label="分档"><span class="tier-pill {{ 'tier-safe' if row.tier == '保' else ('tier-steady' if row.tier == '稳' else 'tier-crash') }}">{{ row.tier }}</span></td>
+              <td data-label="概率"><span class="prob-chip" data-tip="{{ row.probability_desc }}" title="{{ row.probability_desc }}">{{ "%.1f%%"|format(row.probability * 100) }}</span></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty">没有符合当前条件的结果，请调整筛选条件。</p>
+      {% endif %}
+    </section>
+    {% endif %}
+  </main>
+  <script>
+    (function () {
+      const tierButtons = document.querySelectorAll("[data-tier-filter]");
+      const tierRows = document.querySelectorAll("tr[data-tier]");
+      const tierStatus = document.getElementById("tier-filter-status");
+
+      function applyTierFilter(tier) {
+        let visibleCount = 0;
+        tierRows.forEach((row) => {
+          const matched = tier === "全部" || row.dataset.tier === tier;
+          row.classList.toggle("is-row-hidden", !matched);
+          if (matched) {
+            visibleCount += 1;
+          }
+        });
+        tierButtons.forEach((btn) => {
+          const active = btn.dataset.tierFilter === tier;
+          btn.classList.toggle("active", active);
+          btn.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+        if (tierStatus) {
+          tierStatus.textContent = "当前显示：" + tier + "（" + visibleCount + "条）";
+        }
+      }
+
+      tierButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          applyTierFilter(btn.dataset.tierFilter);
+        });
+      });
+      if (tierButtons.length && tierRows.length) {
+        applyTierFilter("全部");
+      }
+    })();
+  </script>
+</body>
+</html>

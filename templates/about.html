@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    {% include '_tabs.html' %}
+    <section class="hero">
+      <p class="eyebrow">ABOUT THIS PROJECT</p>
+      <h1>关于作者与项目</h1>
+      <p class="hero-desc">这里用于展示作者信息、项目背景、联系方式等内容。</p>
+    </section>
+
+    <section class="card about-card">
+      {% include '_about_content.html' %}
+    </section>
+  </main>
+</body>
+</html>
