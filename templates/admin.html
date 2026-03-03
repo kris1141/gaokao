@@ -8,12 +8,18 @@
 </head>
 <body>
   <main class="page">
-    <nav class="tabs-nav" aria-label="页面导航">
-      <a class="tabs-link {% if request.path == '/' %}active{% endif %}" href="/">高考分预测</a>
-      <a class="tabs-link {% if request.path.startswith('/mock-convert') %}active{% endif %}" href="/mock-convert">联考换算预测</a>
-      <a class="tabs-link {% if request.path.startswith('/about') %}active{% endif %}" href="/about">About</a>
-      <a class="tabs-link {% if request.path.startswith(admin_path) %}active{% endif %}" href="{{ admin_path }}">后台</a>
-    </nav>
+    <div class="topbar">
+      <div class="brand-block">
+        <p class="brand-kicker">CHONGQING GAOKAO</p>
+        <p class="brand-title">录取预测系统</p>
+      </div>
+      <nav class="tabs-nav" aria-label="页面导航">
+        <a class="tabs-link {% if request.path == '/' %}active{% endif %}" href="/">高考分预测</a>
+        <a class="tabs-link {% if request.path.startswith('/mock-convert') %}active{% endif %}" href="/mock-convert">联考换算预测</a>
+        <a class="tabs-link {% if request.path.startswith('/about') %}active{% endif %}" href="/about">About</a>
+        <a class="tabs-link {% if request.path.startswith(admin_path) %}active{% endif %}" href="{{ admin_path }}">后台</a>
+      </nav>
+    </div>
 
     <section class="hero">
       <p class="eyebrow">ADMIN PANEL</p>

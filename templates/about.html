@@ -8,13 +8,25 @@
 </head>
 <body>
   <main class="page">
-    <nav class="tabs-nav" aria-label="页面导航">
-      <a class="tabs-link {% if request.path == '/' %}active{% endif %}" href="/">高考分预测</a>
-      <a class="tabs-link {% if request.path.startswith('/mock-convert') %}active{% endif %}" href="/mock-convert">联考换算预测</a>
-      <a class="tabs-link {% if request.path.startswith('/about') %}active{% endif %}" href="/about">About</a>
-    </nav>
+    <div class="topbar">
+      <div class="brand-block">
+        <p class="brand-kicker">CHONGQING GAOKAO</p>
+        <p class="brand-title">录取预测系统</p>
+      </div>
+      <nav class="tabs-nav" aria-label="页面导航">
+        <a class="tabs-link {% if request.path == '/' %}active{% endif %}" href="/">高考分预测</a>
+        <a class="tabs-link {% if request.path.startswith('/mock-convert') %}active{% endif %}" href="/mock-convert">联考换算预测</a>
+        <a class="tabs-link {% if request.path.startswith('/about') %}active{% endif %}" href="/about">About</a>
+      </nav>
+    </div>
+    {% if site_meta.notice %}
+    <section class="card notice-card">
+      <p>{{ site_meta.notice }}</p>
+      {% if site_meta.contact %}<span>联系：{{ site_meta.contact }}</span>{% endif %}
+    </section>
+    {% endif %}
     <section class="hero">
-      <p class="eyebrow">ABOUT THIS PROJECT</p>
+      <p class="eyebrow">PROJECT INFO</p>
       <h1>关于作者与项目</h1>
       <p class="hero-desc">这里用于展示作者信息、项目背景、联系方式等内容。</p>
     </section>
