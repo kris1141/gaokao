@@ -5,7 +5,7 @@ import os
 import re
 from typing import Optional
 
-from flask import Flask, render_template, request, session
+from flask import Flask, jsonify, render_template, request, session
 
 from admission_service import AdmissionEngine, MOCK_SCORE_DIR, PROBABILITY_GUIDE, normalize_stream
 
@@ -104,6 +104,14 @@ def build_recommendation(stream: str, user_rank: int, form: dict):
     return recommendations, tier_stats
 
 
+def normalize_form_payload(defaults: dict, payload: dict) -> dict:
+    form = defaults.copy()
+    for key in form.keys():
+        if key in payload and payload[key] is not None:
+            form[key] = str(payload[key]).strip()
+    return form
+
+
 def get_admin_token() -> str:
     return os.environ.get("ADMIN_TOKEN", "").strip()
 
@@ -158,7 +166,6 @@ def index():
             )
 
             recommendations, tier_stats = build_recommendation(stream, user_rank, form)
-
             result = {
                 "stream": stream,
                 "score": score,
@@ -222,7 +229,6 @@ def mock_convert():
             )
 
             recommendations, tier_stats = build_recommendation(stream, user_rank, form)
-
             result = {
                 "stream": stream,
                 "used_score": used_score,
@@ -244,6 +250,118 @@ def mock_convert():
             error = str(exc)
 
     return render_template("mock_convert.html", form=form, result=result, error=error, mock_options=mock_options)
+
+
+@app.route("/api/mock-options", methods=["GET"])
+def api_mock_options():
+    stream = normalize_stream(request.args.get("stream", "历史"))
+    if stream not in {"历史", "物理"}:
+        return jsonify({"ok": False, "error": "科类仅支持 历史/物理"}), 400
+    return jsonify({"ok": True, "data": engine.get_mock_exam_options(stream)})
+
+
+@app.route("/api/predict", methods=["POST"])
+def api_predict():
+    payload = request.get_json(silent=True) or {}
+    form = normalize_form_payload(
+        {
+            "stream": "历史",
+            "score": "",
+            "rank": "",
+            "top_n": "50",
+            "art_culture_score": "",
+            "art_special_score": "",
+            "school_keyword": "",
+            "major_keyword": "",
+            "region_keyword": "",
+        },
+        payload,
+    )
+
+    try:
+        stream = normalize_stream(form["stream"])
+        if not stream:
+            raise ValueError("科类仅支持 历史/物理/艺术")
+
+        score = to_optional_float(form["score"])
+        rank = to_int(form["rank"])
+        art_culture_score = to_optional_float(form["art_culture_score"])
+        art_special_score = to_optional_float(form["art_special_score"])
+        user_rank, used_score, _ = engine.rank_from_input(
+            stream=stream,
+            score=score,
+            rank=rank,
+            art_mode="普高",
+            art_culture_score=art_culture_score,
+            art_special_score=art_special_score,
+        )
+
+        recommendations, tier_stats = build_recommendation(stream, user_rank, form)
+        data = {
+            "stream": stream,
+            "score": score,
+            "used_score": used_score,
+            "score_display": score_display(score),
+            "used_score_display": score_display(used_score),
+            "rank": rank,
+            "user_rank": user_rank,
+            "recommendations": recommendations,
+            "tier_stats": tier_stats,
+            "probability_guide": PROBABILITY_GUIDE,
+        }
+        return jsonify({"ok": True, "data": data})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/mock-convert", methods=["POST"])
+def api_mock_convert():
+    payload = request.get_json(silent=True) or {}
+    form = normalize_form_payload(
+        {
+            "stream": "历史",
+            "mock_exam_key": "",
+            "mock_score": "",
+            "mock_rank": "",
+            "top_n": "50",
+            "school_keyword": "",
+            "major_keyword": "",
+            "region_keyword": "",
+        },
+        payload,
+    )
+
+    try:
+        stream = normalize_stream(form["stream"])
+        if stream not in {"历史", "物理"}:
+            raise ValueError("联考换算仅支持 历史/物理")
+
+        mock_score = to_optional_float(form["mock_score"])
+        mock_rank = to_int(form["mock_rank"])
+        user_rank, used_score, conversion = engine.rank_from_input(
+            stream=stream,
+            score=None,
+            rank=None,
+            mock_score=mock_score,
+            mock_rank=mock_rank,
+            mock_exam_key=form["mock_exam_key"],
+        )
+        recommendations, tier_stats = build_recommendation(stream, user_rank, form)
+        data = {
+            "stream": stream,
+            "used_score": used_score,
+            "used_score_display": score_display(used_score),
+            "mock_score_display": score_display(mock_score),
+            "mock_rank": mock_rank,
+            "user_rank": user_rank,
+            "conversion": conversion,
+            "recommendations": recommendations,
+            "tier_stats": tier_stats,
+            "probability_guide": PROBABILITY_GUIDE,
+        }
+        return jsonify({"ok": True, "data": data})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 @app.route("/about", methods=["GET"])
