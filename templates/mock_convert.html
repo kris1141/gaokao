@@ -1,65 +1,70 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>联考换算与录取预测</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-  <main class="page">
-    <div class="topbar">
-      <div class="brand-block">
-        <p class="brand-kicker">CHONGQING GAOKAO</p>
-        <p class="brand-title">录取预测系统</p>
+<body class="app-body">
+  <main class="container py-4 app-shell">
+    <header class="glass-nav p-3 mb-3">
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
+        <div>
+          <p class="brand-en">CHONGQING GAOKAO</p>
+          <h1 class="brand-cn mb-0">录取预测系统</h1>
+        </div>
+        <nav class="nav nav-pills flex-wrap gap-2" aria-label="页面导航">
+          <a class="nav-link {{ 'active' if request.path == '/' else '' }}" href="/">高考分预测</a>
+          <a class="nav-link {{ 'active' if request.path.startswith('/mock-convert') else '' }}" href="/mock-convert">联考换算预测</a>
+          <a class="nav-link {{ 'active' if request.path.startswith('/about') else '' }}" href="/about">关于</a>
+        </nav>
       </div>
-      <nav class="tabs-nav" aria-label="页面导航">
-        <a class="tabs-link {% if request.path == '/' %}active{% endif %}" href="/">高考分预测</a>
-        <a class="tabs-link {% if request.path.startswith('/mock-convert') %}active{% endif %}" href="/mock-convert">联考换算预测</a>
-        <a class="tabs-link {% if request.path.startswith('/about') %}active{% endif %}" href="/about">About</a>
-      </nav>
-    </div>
+    </header>
+
     {% if site_meta.notice %}
-    <section class="card notice-card">
-      <p>{{ site_meta.notice }}</p>
-      {% if site_meta.contact %}<span>联系：{{ site_meta.contact }}</span>{% endif %}
+    <section class="alert alert-info border-0 shadow-sm mb-3" role="status">
+      <div class="fw-semibold">{{ site_meta.notice }}</div>
+      {% if site_meta.contact %}<div class="small mt-1">联系：{{ site_meta.contact }}</div>{% endif %}
     </section>
     {% endif %}
-    <section class="hero">
-      <p class="eyebrow">联考位次百分位换算</p>
-      <h1>联考换算预测页</h1>
-      <p class="hero-desc">输入联考成绩或联考位次后，系统换算高考定位并输出冲稳保推荐结果。</p>
-      <div class="hero-tags">
-        <span>联考成绩</span>
-        <span>位次换算</span>
-        <span>录取预测</span>
+
+    <section class="hero-panel p-4 p-lg-5 mb-3">
+      <p class="hero-kicker">联考位次百分位换算</p>
+      <h2 class="hero-title">联考换算预测页</h2>
+      <p class="hero-subtitle">输入联考成绩或联考位次后，系统换算高考定位并输出冲稳保推荐结果。</p>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="badge text-bg-light">联考成绩</span>
+        <span class="badge text-bg-light">位次换算</span>
+        <span class="badge text-bg-light">录取预测</span>
       </div>
-      <div class="hero-grid">
-        <div><p>核心方法</p><strong>位次百分位映射</strong></div>
-        <div><p>适用科类</p><strong>历史 / 物理</strong></div>
-        <div><p>输出结果</p><strong>高考分 + 推荐</strong></div>
+      <div class="row g-2">
+        <div class="col-md-4"><div class="hero-metric"><small>核心方法</small><strong>位次百分位映射</strong></div></div>
+        <div class="col-md-4"><div class="hero-metric"><small>适用科类</small><strong>历史 / 物理</strong></div></div>
+        <div class="col-md-4"><div class="hero-metric"><small>输出结果</small><strong>高考分 + 推荐</strong></div></div>
       </div>
     </section>
 
-    <section class="workspace">
-      <div class="workspace-left">
-        <section class="card form-card">
-          <div class="card-head">
-            <h2>联考换算参数</h2>
-            <p>填写联考成绩或联考位次（二选一即可），系统会自动映射到高考定位。</p>
-          </div>
-          <form method="post">
-            <div class="grid grid-3">
-              <label>
-                <span>科类</span>
-                <select name="stream">
+    <section class="row g-3 align-items-start">
+      <div class="col-xl-6">
+        <section class="card border-0 shadow-sm h-100">
+          <div class="card-body p-4">
+            <div class="mb-3">
+              <h3 class="h5 mb-1">联考换算参数</h3>
+              <p class="text-secondary mb-0">填写联考成绩或联考位次（二选一即可），系统会自动映射到高考定位。</p>
+            </div>
+            <form method="post" class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">科类</label>
+                <select name="stream" class="form-select">
                   <option value="历史" {% if form.stream == "历史" %}selected{% endif %}>历史类</option>
                   <option value="物理" {% if form.stream == "物理" %}selected{% endif %}>物理类</option>
                 </select>
-              </label>
-              <label>
-                <span>联考试卷</span>
-                <select name="mock_exam_key" {% if not mock_options %}disabled{% endif %}>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label">联考试卷</label>
+                <select name="mock_exam_key" class="form-select" {% if not mock_options %}disabled{% endif %}>
                   {% if mock_options %}
                     {% for option in mock_options %}
                       <option value="{{ option.key }}" {% if form.mock_exam_key == option.key %}selected{% endif %}>{{ option.label }}</option>
@@ -68,159 +73,146 @@
                     <option value="">未识别到联考数据文件</option>
                   {% endif %}
                 </select>
-              </label>
-              <label>
-                <span>联考成绩（可选）</span>
-                <input name="mock_score" type="number" step="0.01" placeholder="例如 495.5" value="{{ form.mock_score }}">
-              </label>
-              <label>
-                <span>联考位次（可选）</span>
-                <input name="mock_rank" type="number" placeholder="例如 8500" value="{{ form.mock_rank }}">
-              </label>
-              <label>
-                <span>推荐条数</span>
-                <input name="top_n" type="number" min="10" max="200" value="{{ form.top_n }}">
-              </label>
-              <label>
-                <span>院校关键词</span>
-                <input name="school_keyword" placeholder="例如 重庆大学" value="{{ form.school_keyword }}">
-              </label>
-              <label>
-                <span>专业关键词</span>
-                <input name="major_keyword" placeholder="例如 计算机" value="{{ form.major_keyword }}">
-              </label>
-              <label class="span-3">
-                <span>地域关键词（按院校名筛选）</span>
-                <input name="region_keyword" placeholder="例如 北京 / 上海" value="{{ form.region_keyword }}">
-              </label>
-            </div>
-            <div class="action-row">
-              <button type="submit">联考换算并预测</button>
-              <p>优先使用联考位次；若未填位次则使用联考成绩自动算位次。</p>
-            </div>
-          </form>
-          <p class="formula-note">
-            联考文件命名建议：放在 <code>mock_exams</code> 目录，使用 <code>历史_一诊.xlsx</code> / <code>物理_一诊.xlsx</code> 格式。
-          </p>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">联考成绩（可选）</label>
+                <input name="mock_score" type="number" step="0.01" class="form-control" placeholder="例如 495.5" value="{{ form.mock_score }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">联考位次（可选）</label>
+                <input name="mock_rank" type="number" class="form-control" placeholder="例如 8500" value="{{ form.mock_rank }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">推荐条数</label>
+                <input name="top_n" type="number" min="10" max="200" class="form-control" value="{{ form.top_n }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">院校关键词</label>
+                <input name="school_keyword" class="form-control" placeholder="例如 重庆大学" value="{{ form.school_keyword }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">专业关键词</label>
+                <input name="major_keyword" class="form-control" placeholder="例如 计算机" value="{{ form.major_keyword }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">地域关键词（按院校名筛选）</label>
+                <input name="region_keyword" class="form-control" placeholder="例如 北京 / 上海" value="{{ form.region_keyword }}">
+              </div>
+              <div class="col-12 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                <button type="submit" class="btn btn-primary px-4">联考换算并预测</button>
+                <p class="small text-secondary mb-0">优先使用联考位次；若未填位次则使用联考成绩自动算位次。</p>
+              </div>
+            </form>
+            <p class="small text-secondary mt-3 mb-0">
+              联考文件命名建议：放在 <code>mock_exams</code> 目录，使用 <code>历史_一诊.xlsx</code> / <code>物理_一诊.xlsx</code> 格式。
+            </p>
+          </div>
         </section>
       </div>
 
-      <div class="workspace-right">
+      <div class="col-xl-6">
         {% if error %}
-        <section class="card error-card" id="result-anchor">
-          <h2>输入错误</h2>
-          <p>{{ error }}</p>
+        <section class="card border-0 shadow-sm border-danger-subtle" id="result-anchor">
+          <div class="card-body p-4">
+            <h3 class="h5 text-danger">输入错误</h3>
+            <p class="mb-0 text-secondary">{{ error }}</p>
+          </div>
         </section>
         {% endif %}
 
         {% if result %}
-        <section class="card" id="result-anchor">
-          <div class="card-head">
-            <h2>换算结果</h2>
-          </div>
-          <div class="kpi-grid">
-            <div class="kpi">
-              <p class="kpi-label">科类</p>
-              <p class="kpi-value">{{ result.stream }}</p>
+        <section class="card border-0 shadow-sm" id="result-anchor">
+          <div class="card-body p-4">
+            <h3 class="h5 mb-3">换算结果</h3>
+            <div class="row g-2 mb-3">
+              <div class="col-md-6 col-xl-4"><div class="kpi-card"><small>科类</small><strong>{{ result.stream }}</strong></div></div>
+              <div class="col-md-6 col-xl-4"><div class="kpi-card"><small>联考位次</small><strong>{{ result.conversion.mock_rank }}</strong></div></div>
+              <div class="col-md-6 col-xl-4"><div class="kpi-card"><small>等效高考分</small><strong>{{ result.used_score_display if result.used_score_display is not none else '-' }}</strong></div></div>
+              <div class="col-md-6 col-xl-4"><div class="kpi-card"><small>等效高考位次</small><strong>{{ result.user_rank }}</strong></div></div>
+              <div class="col-md-6 col-xl-4"><div class="kpi-card"><small>模式</small><strong>联考换算</strong></div></div>
             </div>
-            <div class="kpi">
-              <p class="kpi-label">联考位次</p>
-              <p class="kpi-value">{{ result.conversion.mock_rank }}</p>
+
+            <p class="small text-secondary border rounded p-2 mb-3 bg-body-tertiary">
+              联考试卷：{{ result.conversion.mock_exam_label }}<br>
+              联考位次 {{ result.conversion.mock_rank }}/{{ result.conversion.mock_total }}
+              → 高考等效位次 {{ result.conversion.gaokao_rank }}/{{ result.conversion.gaokao_total }}
+              → 预测高考分 {{ result.conversion.predicted_score }}
+            </p>
+
+            <div class="tier-row mb-2">
+              <button type="button" class="tier-filter active" data-tier-filter="全部" aria-pressed="true">全部 {{ result.recommendations|length }}</button>
+              <button type="button" class="tier-filter crash" data-tier-filter="冲" aria-pressed="false">冲 {{ result.tier_stats['冲'] }}</button>
+              <button type="button" class="tier-filter steady" data-tier-filter="稳" aria-pressed="false">稳 {{ result.tier_stats['稳'] }}</button>
+              <button type="button" class="tier-filter safe" data-tier-filter="保" aria-pressed="false">保 {{ result.tier_stats['保'] }}</button>
             </div>
-            <div class="kpi">
-              <p class="kpi-label">等效高考分</p>
-              <p class="kpi-value">{{ result.used_score_display if result.used_score_display is not none else "-" }}</p>
+            <p class="small text-secondary mb-3" id="tier-filter-status">当前显示：全部</p>
+
+            <div class="row g-2">
+              {% for item in result.probability_guide %}
+              <div class="col-6 col-lg"><div class="guide-item"><p>{{ '%.0f%%'|format(item.min * 100) }}+</p><strong>{{ item.label }}</strong><span>{{ item.desc }}</span></div></div>
+              {% endfor %}
             </div>
-            <div class="kpi">
-              <p class="kpi-label">等效高考位次</p>
-              <p class="kpi-value">{{ result.user_rank }}</p>
-            </div>
-            <div class="kpi">
-              <p class="kpi-label">模式</p>
-              <p class="kpi-value">联考换算</p>
-            </div>
-          </div>
-          <p class="conversion-note">
-            联考试卷：{{ result.conversion.mock_exam_label }}
-            <br>
-            联考位次 {{ result.conversion.mock_rank }}/{{ result.conversion.mock_total }}
-            → 高考等效位次 {{ result.conversion.gaokao_rank }}/{{ result.conversion.gaokao_total }}
-            → 预测高考分 {{ result.conversion.predicted_score }}
-          </p>
-          <div class="tier-row">
-            <button type="button" class="tier-filter active" data-tier-filter="全部" aria-pressed="true">全部 {{ result.recommendations|length }}</button>
-            <button type="button" class="tier-filter crash" data-tier-filter="冲" aria-pressed="false">冲 {{ result.tier_stats["冲"] }}</button>
-            <button type="button" class="tier-filter steady" data-tier-filter="稳" aria-pressed="false">稳 {{ result.tier_stats["稳"] }}</button>
-            <button type="button" class="tier-filter safe" data-tier-filter="保" aria-pressed="false">保 {{ result.tier_stats["保"] }}</button>
-          </div>
-          <p class="tier-filter-status" id="tier-filter-status">当前显示：全部</p>
-          <div class="prob-guide">
-            {% for item in result.probability_guide %}
-            <div class="guide-item">
-              <p>{{ "%.0f%%"|format(item.min * 100) }}+</p>
-              <strong>{{ item.label }}</strong>
-              <span>{{ item.desc }}</span>
-            </div>
-            {% endfor %}
           </div>
         </section>
-
-
         {% else %}
-        <section class="card placeholder-card">
-          <h2>等待换算结果</h2>
-          <p>在左侧填写联考参数后，这里会展示换算过程和推荐结果。</p>
+        <section class="card border-0 shadow-sm">
+          <div class="card-body p-4">
+            <h3 class="h5">等待换算结果</h3>
+            <p class="text-secondary mb-0">在左侧填写联考参数后，这里会展示换算过程和推荐结果。</p>
+          </div>
         </section>
         {% endif %}
       </div>
     </section>
 
     {% if result %}
-        <section class="card">
-          <div class="card-head">
-            <h2>推荐列表</h2>
-            <p>已按换算后的高考位次生成。</p>
-          </div>
-          {% if result.recommendations %}
-          <div class="table-wrap">
-            <table class="recommend-table">
-              <thead>
-                <tr>
-                  <th>院校代码</th>
-                  <th>院校名称</th>
-                  <th>专业代码</th>
-                  <th>专业名称</th>
-                  <th>最低分</th>
-                  <th>最低位次</th>
-                  <th>位次比</th>
-                  <th>分档</th>
-                  <th>概率</th>
-                </tr>
-              </thead>
-              <tbody>
-              {% for row in result.recommendations %}
-                <tr data-tier="{{ row.tier }}">
-                  <td data-label="院校代码">{{ row.school_code }}</td>
-                  <td data-label="院校名称">{{ row.school_name }}</td>
-                  <td data-label="专业代码">{{ row.major_code }}</td>
-                  <td data-label="专业名称">{{ row.major_name }}</td>
-                  <td data-label="最低分">{{ row.min_score }}</td>
-                  <td data-label="最低位次">{{ row.min_rank }}</td>
-                  <td data-label="位次比">{{ "%.4f"|format(row.rank_ratio) }}</td>
-                  <td data-label="分档"><span class="tier-pill {{ 'tier-safe' if row.tier == '保' else ('tier-steady' if row.tier == '稳' else 'tier-crash') }}">{{ row.tier }}</span></td>
-                  <td data-label="概率"><span class="prob-chip" data-tip="{{ row.probability_desc }}" title="{{ row.probability_desc }}">{{ "%.1f%%"|format(row.probability * 100) }}</span></td>
-                </tr>
-              {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          {% else %}
-          <p class="empty">没有符合当前条件的结果，请调整筛选条件。</p>
-          {% endif %}
-        </section>
-
+    <section class="card border-0 shadow-sm mt-3">
+      <div class="card-body p-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+          <h3 class="h5 mb-0">推荐列表</h3>
+          <p class="small text-secondary mb-0">已按换算后的高考位次生成。</p>
+        </div>
+        {% if result.recommendations %}
+        <div class="table-responsive recommendation-wrap">
+          <table class="table align-middle mb-0 recommendation-table">
+            <thead>
+              <tr>
+                <th>院校代码</th>
+                <th>院校名称</th>
+                <th>专业代码</th>
+                <th>专业名称</th>
+                <th>最低分</th>
+                <th>最低位次</th>
+                <th>位次比</th>
+                <th>分档</th>
+                <th>概率</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for row in result.recommendations %}
+              <tr data-tier="{{ row.tier }}">
+                <td data-label="院校代码">{{ row.school_code }}</td>
+                <td data-label="院校名称">{{ row.school_name }}</td>
+                <td data-label="专业代码">{{ row.major_code }}</td>
+                <td data-label="专业名称">{{ row.major_name }}</td>
+                <td data-label="最低分">{{ row.min_score }}</td>
+                <td data-label="最低位次">{{ row.min_rank }}</td>
+                <td data-label="位次比">{{ '%.4f'|format(row.rank_ratio) }}</td>
+                <td data-label="分档"><span class="tier-pill {{ 'tier-safe' if row.tier == '保' else ('tier-steady' if row.tier == '稳' else 'tier-crash') }}">{{ row.tier }}</span></td>
+                <td data-label="概率"><span class="prob-chip" data-tip="{{ row.probability_desc }}" title="{{ row.probability_desc }}">{{ '%.1f%%'|format(row.probability * 100) }}</span></td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-secondary mb-0">没有符合当前条件的结果，请调整筛选条件。</p>
+        {% endif %}
+      </div>
+    </section>
     {% endif %}
   </main>
+
   <script>
     (function () {
       const tierButtons = document.querySelectorAll("[data-tier-filter]");
@@ -233,36 +225,25 @@
         tierRows.forEach((row) => {
           const matched = tier === "全部" || row.dataset.tier === tier;
           row.classList.toggle("is-row-hidden", !matched);
-          if (matched) {
-            visibleCount += 1;
-          }
+          if (matched) visibleCount += 1;
         });
         tierButtons.forEach((btn) => {
           const active = btn.dataset.tierFilter === tier;
           btn.classList.toggle("active", active);
           btn.setAttribute("aria-pressed", active ? "true" : "false");
         });
-        if (tierStatus) {
-          tierStatus.textContent = "当前显示：" + tier + "（" + visibleCount + "条）";
-        }
+        if (tierStatus) tierStatus.textContent = "当前显示：" + tier + "（" + visibleCount + "条）";
       }
 
       tierButtons.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          applyTierFilter(btn.dataset.tierFilter);
-        });
+        btn.addEventListener("click", () => applyTierFilter(btn.dataset.tierFilter));
       });
-      if (tierButtons.length && tierRows.length) {
-        applyTierFilter("全部");
-      }
+      if (tierButtons.length && tierRows.length) applyTierFilter("全部");
       if (shouldAutoScroll) {
         const anchor = document.getElementById("result-anchor");
-        if (anchor) {
-          anchor.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
+        if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     })();
   </script>
 </body>
 </html>
-
