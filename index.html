@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>重庆高考录取预测系统</title>
+  <link rel="stylesheet" href="./static/style.css">
+</head>
+<body>
+  <main class="page" id="app">
+    <div class="topbar">
+      <nav class="tabs-nav" aria-label="页面导航">
+        <a class="tabs-link" data-route="predict" href="#/predict">高考分预测</a>
+        <a class="tabs-link" data-route="mock" href="#/mock">联考换算预测</a>
+        <a class="tabs-link" data-route="about" href="#/about">About</a>
+      </nav>
+    </div>
+
+    <section class="card notice-card">
+      <span>首次使用请先在下方加载数据文件。</span>
+    </section>
+
+    <section class="hero">
+      <p class="eyebrow">2025 重庆本科批参考数据</p>
+      <h1>重庆高考录取预测系统</h1>
+      <p class="hero-desc">支持高考分预测、联考换算预测、关键词筛选，全部在浏览器端运行。</p>
+      <div class="hero-tags">
+        <span>本地 XLS 解析</span>
+        <span>位次换算</span>
+        <span>冲 / 稳 / 保</span>
+      </div>
+    </section>
+
+    <section class="card form-card">
+      <div class="card-head">
+        <h2>1) 加载数据文件</h2>
+        <p>历史、物理必填；艺术与联考文件可选。支持 .xls / .xlsx。</p>
+      </div>
+      <div class="grid grid-3">
+        <label>
+          <span>历史录取表（hist.xlsx）</span>
+          <input id="file-hist-admission" type="file" accept=".xls,.xlsx">
+        </label>
+        <label>
+          <span>历史一分一段（历史类含加分一分段表.xlsx）</span>
+          <input id="file-hist-score" type="file" accept=".xls,.xlsx">
+        </label>
+        <label>
+          <span>物理录取表（phys.xlsx）</span>
+          <input id="file-phys-admission" type="file" accept=".xls,.xlsx">
+        </label>
+        <label>
+          <span>物理一分一段（物理类含加分一分段表.xlsx）</span>
+          <input id="file-phys-score" type="file" accept=".xls,.xlsx">
+        </label>
+        <label>
+          <span>艺术录取表（艺术类.xlsx / 艺术批.xlsx，可选）</span>
+          <input id="file-art-admission" type="file" accept=".xls,.xlsx">
+        </label>
+        <label>
+          <span>联考一分一段（可多选，命名含历史/物理）</span>
+          <input id="file-mock" type="file" accept=".xls,.xlsx" multiple>
+        </label>
+      </div>
+      <div class="action-row">
+        <button type="button" id="btn-load-data">手动加载 建立索引</button>
+        <button type="button" id="btn-auto-load">自动加载默认文件</button>
+        <p id="data-status">状态：未加载</p>
+      </div>
+    </section>
+
+    <section id="view-predict" class="workspace route-view">
+      <div class="workspace-left">
+        <section class="card form-card">
+          <div class="card-head">
+            <h2>2) 高考分预测</h2>
+            <p>普通类填分数或位次；艺术类可填文化分 + 专业分自动换算综合分。</p>
+          </div>
+          <form id="predict-form">
+            <div class="grid grid-3">
+              <label>
+                <span>科类</span>
+                <select name="stream" id="predict-stream">
+                  <option value="历史">历史类</option>
+                  <option value="物理">物理类</option>
+                  <option value="艺术">艺术类</option>
+                </select>
+              </label>
+              <label class="normal-only">
+                <span id="predict-score-label">分数（可选）</span>
+                <input name="score" type="number" step="0.01" placeholder="例如 588">
+              </label>
+              <label>
+                <span>位次（可选）</span>
+                <input name="rank" type="number" placeholder="例如 5000">
+              </label>
+
+              <div class="art-panel art-only is-hidden span-3">
+                <div class="art-grid">
+                  <label>
+                    <span>文化成绩（满分750）</span>
+                    <input id="art-culture" name="art_culture_score" type="number" step="0.01" placeholder="例如 520">
+                  </label>
+                  <label>
+                    <span>艺考统考成绩</span>
+                    <input id="art-special" name="art_special_score" type="number" step="0.01" placeholder="例如 245.5">
+                  </label>
+                  <label>
+                    <span>综合分（自动换算）</span>
+                    <input id="art-composite" type="text" readonly placeholder="输入后自动计算">
+                  </label>
+                </div>
+              </div>
+
+              <label>
+                <span>推荐条数</span>
+                <input name="top_n" type="number" min="10" max="200" value="50">
+              </label>
+              <label>
+                <span>院校关键词</span>
+                <input name="school_keyword" placeholder="例如 重庆大学">
+              </label>
+              <label>
+                <span>专业关键词</span>
+                <input name="major_keyword" placeholder="例如 计算机">
+              </label>
+              <label class="span-3">
+                <span>地域关键词（按院校名筛选）</span>
+                <input name="region_keyword" placeholder="例如 北京 / 上海">
+              </label>
+            </div>
+            <div class="action-row">
+              <button type="submit">开始预测</button>
+              <p>模型：位次比 + 分档概率。</p>
+            </div>
+          </form>
+        </section>
+      </div>
+      <div class="workspace-right">
+        <section class="card placeholder-card" id="predict-result">
+          <h2>等待预测结果</h2>
+          <p>请先加载数据，再提交预测参数。</p>
+        </section>
+      </div>
+    </section>
+
+    <section id="view-mock" class="workspace route-view is-hidden">
+      <div class="workspace-left">
+        <section class="card form-card">
+          <div class="card-head">
+            <h2>3) 联考换算预测</h2>
+            <p>输入联考成绩或联考位次，按百分位映射到高考位次后预测。</p>
+          </div>
+          <form id="mock-form">
+            <div class="grid grid-3">
+              <label>
+                <span>科类</span>
+                <select name="stream" id="mock-stream">
+                  <option value="历史">历史类</option>
+                  <option value="物理">物理类</option>
+                </select>
+              </label>
+              <label>
+                <span>联考试卷</span>
+                <select name="mock_exam_key" id="mock-exam-select"></select>
+              </label>
+              <label>
+                <span>联考成绩（可选）</span>
+                <input name="mock_score" type="number" step="0.01" placeholder="例如 495.5">
+              </label>
+              <label>
+                <span>联考位次（可选）</span>
+                <input name="mock_rank" type="number" placeholder="例如 8500">
+              </label>
+              <label>
+                <span>推荐条数</span>
+                <input name="top_n" type="number" min="10" max="200" value="50">
+              </label>
+              <label>
+                <span>院校关键词</span>
+                <input name="school_keyword" placeholder="例如 重庆大学">
+              </label>
+              <label>
+                <span>专业关键词</span>
+                <input name="major_keyword" placeholder="例如 计算机">
+              </label>
+              <label class="span-3">
+                <span>地域关键词（按院校名筛选）</span>
+                <input name="region_keyword" placeholder="例如 北京 / 上海">
+              </label>
+            </div>
+            <div class="action-row">
+              <button type="submit">联考换算并预测</button>
+              <p>优先使用联考位次；未填位次时自动由联考分换算。</p>
+            </div>
+          </form>
+        </section>
+      </div>
+      <div class="workspace-right">
+        <section class="card placeholder-card" id="mock-result">
+          <h2>等待换算结果</h2>
+          <p>请先加载历史/物理主数据与联考数据，再提交参数。</p>
+        </section>
+      </div>
+    </section>
+
+    <section id="view-about" class="route-view is-hidden">
+      <section class="card about-card">
+        <div class="card-head">
+          <h2>作者信息</h2>
+        </div>
+        <div class="about-grid">
+          <article class="about-block">
+            <h3>作者</h3>
+            <p>kris</p>
+            <p>来自重庆某不知名中学的不知名开发者</p>
+            <p>静态页面化： 某不知名小猫</p>
+          </article>
+          <article class="about-block">
+            <h3>项目简介</h3>
+            <p>基于重庆高考录取数据与一分一段表，提供位次驱动的录取概率预测与联考换算参考。</p>
+          </article>
+          <article class="about-block">
+            <h3>版本说明</h3>
+            <p>静态版本：V2.0</p>
+            <p>运行方式：纯浏览器端，无后端依赖</p>
+          </article>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://unpkg.shop.jd.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="./static/spa.js"></script>
+</body>
+</html>
