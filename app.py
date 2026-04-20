@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import io
 import json
 import os
 import re
+from datetime import datetime
 from typing import Optional
 
-from flask import Flask, jsonify, render_template, request, session
+import pandas as pd
+from flask import Flask, jsonify, render_template, request, send_file, session
+from openpyxl.utils import get_column_letter
 
 from admission_service import AdmissionEngine, MOCK_SCORE_DIR, PROBABILITY_GUIDE, normalize_stream
 
@@ -125,6 +129,61 @@ def safe_label(label: str) -> str:
     text = re.sub(r"[^\w\u4e00-\u9fff\- ]", "", text)
     text = text.replace(" ", "_")
     return text[:40].strip("_")
+
+
+def safe_text(value: object, max_length: int = 120) -> str:
+    text = str(value if value is not None else "").strip()
+    text = re.sub(r"\s+", " ", text)
+    if len(text) > max_length:
+        text = text[:max_length]
+    return text
+
+
+def build_export_rows(payload: dict) -> list:
+    raw_rows = payload.get("rows")
+    if not isinstance(raw_rows, list):
+        raise ValueError("rows 必须是数组")
+    if not raw_rows:
+        raise ValueError("请至少选择 1 条志愿")
+    if len(raw_rows) > 200:
+        raise ValueError("单次最多导出 200 条志愿")
+
+    stream = safe_text(payload.get("stream", ""), 20)
+    user_rank = to_int(payload.get("user_rank", ""))
+    source = safe_text(payload.get("source", ""), 20)
+
+    rows = []
+    for idx, item in enumerate(raw_rows, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"第 {idx} 条志愿格式不正确")
+        school_name = safe_text(item.get("school_name", ""), 120)
+        major_name = safe_text(item.get("major_name", ""), 120)
+        if not school_name or not major_name:
+            raise ValueError(f"第 {idx} 条志愿缺少院校或专业名称")
+
+        probability = to_optional_float(item.get("probability", ""))
+        probability_display = ""
+        if probability is not None:
+            probability_display = f"{max(0.0, min(1.0, probability)) * 100:.1f}%"
+
+        rows.append(
+            {
+                "序号": idx,
+                "科类": stream,
+                "院校代码": safe_text(item.get("school_code", ""), 40),
+                "院校名称": school_name,
+                "专业代码": safe_text(item.get("major_code", ""), 40),
+                "专业名称": major_name,
+                "最低分": safe_text(item.get("min_score", ""), 20),
+                "最低位次": safe_text(item.get("min_rank", ""), 20),
+                "位次比": safe_text(item.get("rank_ratio", ""), 20),
+                "分档": safe_text(item.get("tier", ""), 8),
+                "录取概率": probability_display,
+                "输入位次": user_rank if user_rank is not None else "",
+                "来源": source,
+            }
+        )
+    return rows
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -362,6 +421,36 @@ def api_mock_convert():
         return jsonify({"ok": True, "data": data})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/export-wishlist", methods=["POST"])
+def api_export_wishlist():
+    payload = request.get_json(silent=True) or {}
+    try:
+        rows = build_export_rows(payload)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    df = pd.DataFrame(rows)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="志愿表")
+        ws = writer.sheets["志愿表"]
+        for idx, column in enumerate(df.columns, start=1):
+            values = [str(column)] + [str(v) for v in df[column].tolist()]
+            width = max(10, min(36, max(len(v) for v in values) + 2))
+            ws.column_dimensions[get_column_letter(idx)].width = width
+
+    output.seek(0)
+    source = safe_label(payload.get("source", "预测")) or "预测"
+    stream = safe_label(payload.get("stream", "志愿")) or "志愿"
+    filename = f"{source}_{stream}_志愿表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.route("/about", methods=["GET"])

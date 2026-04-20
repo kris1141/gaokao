@@ -172,13 +172,20 @@
       <div class="card-body p-4">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
           <h3 class="h5 mb-0">推荐列表</h3>
-          <p class="small text-secondary mb-0">鼠标停在概率上可查看解释。</p>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <span class="small text-secondary" id="wishlist-selected-count">已选 0 条</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="wishlist-select-visible">勾选当前可见</button>
+            <button type="button" class="btn btn-success btn-sm" id="export-selected-btn" data-source="高考分预测" data-stream="{{ result.stream }}" data-user-rank="{{ result.user_rank }}" disabled>导出已选志愿</button>
+          </div>
         </div>
         {% if result.recommendations %}
         <div class="table-responsive recommendation-wrap">
           <table class="table align-middle mb-0 recommendation-table">
             <thead>
               <tr>
+                <th style="width: 64px;">
+                  <input type="checkbox" id="wishlist-check-all" aria-label="全选当前可见">
+                </th>
                 <th>院校代码</th>
                 <th>院校名称</th>
                 <th>专业代码</th>
@@ -193,6 +200,22 @@
             <tbody>
             {% for row in result.recommendations %}
               <tr data-tier="{{ row.tier }}">
+                <td data-label="选择">
+                  <input
+                    type="checkbox"
+                    class="wishlist-check"
+                    data-school-code="{{ row.school_code }}"
+                    data-school-name="{{ row.school_name }}"
+                    data-major-code="{{ row.major_code }}"
+                    data-major-name="{{ row.major_name }}"
+                    data-min-score="{{ row.min_score }}"
+                    data-min-rank="{{ row.min_rank }}"
+                    data-rank-ratio="{{ '%.4f'|format(row.rank_ratio) }}"
+                    data-tier="{{ row.tier }}"
+                    data-probability="{{ '%.4f'|format(row.probability) }}"
+                    aria-label="选择该志愿"
+                  >
+                </td>
                 <td data-label="院校代码">{{ row.school_code }}</td>
                 <td data-label="院校名称">{{ row.school_name }}</td>
                 <td data-label="专业代码">{{ row.major_code }}</td>
@@ -278,6 +301,36 @@
       const tierRows = document.querySelectorAll("tr[data-tier]");
       const tierStatus = document.getElementById("tier-filter-status");
       const shouldAutoScroll = {{ "true" if (result or error) else "false" }};
+      const checkAll = document.getElementById("wishlist-check-all");
+      const checks = Array.from(document.querySelectorAll(".wishlist-check"));
+      const selectedCount = document.getElementById("wishlist-selected-count");
+      const selectVisibleBtn = document.getElementById("wishlist-select-visible");
+      const exportBtn = document.getElementById("export-selected-btn");
+
+      function visibleChecks() {
+        return checks.filter((check) => {
+          const row = check.closest("tr");
+          return row && !row.classList.contains("is-row-hidden");
+        });
+      }
+
+      function syncWishlistUi() {
+        const chosen = checks.filter((check) => check.checked).length;
+        if (selectedCount) selectedCount.textContent = "已选 " + chosen + " 条";
+        if (exportBtn) exportBtn.disabled = chosen === 0;
+
+        if (checkAll) {
+          const visible = visibleChecks();
+          if (!visible.length) {
+            checkAll.checked = false;
+            checkAll.indeterminate = false;
+          } else {
+            const checkedVisible = visible.filter((check) => check.checked).length;
+            checkAll.checked = checkedVisible > 0 && checkedVisible === visible.length;
+            checkAll.indeterminate = checkedVisible > 0 && checkedVisible < visible.length;
+          }
+        }
+      }
 
       function applyTierFilter(tier) {
         let visibleCount = 0;
@@ -294,12 +347,106 @@
         if (tierStatus) {
           tierStatus.textContent = "当前显示：" + tier + "（" + visibleCount + "条）";
         }
+        syncWishlistUi();
+      }
+
+      async function exportSelectedRows() {
+        if (!exportBtn) return;
+        const selected = checks.filter((check) => check.checked).map((check) => ({
+          school_code: check.dataset.schoolCode || "",
+          school_name: check.dataset.schoolName || "",
+          major_code: check.dataset.majorCode || "",
+          major_name: check.dataset.majorName || "",
+          min_score: check.dataset.minScore || "",
+          min_rank: check.dataset.minRank || "",
+          rank_ratio: check.dataset.rankRatio || "",
+          tier: check.dataset.tier || "",
+          probability: check.dataset.probability || ""
+        }));
+        if (!selected.length) {
+          syncWishlistUi();
+          return;
+        }
+
+        const payload = {
+          source: exportBtn.dataset.source || "高考分预测",
+          stream: exportBtn.dataset.stream || "",
+          user_rank: exportBtn.dataset.userRank || "",
+          rows: selected
+        };
+
+        const originalText = exportBtn.textContent;
+        exportBtn.disabled = true;
+        exportBtn.textContent = "导出中...";
+        try {
+          const res = await fetch("/api/export-wishlist", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) {
+            let message = "导出失败，请稍后重试";
+            try {
+              const data = await res.json();
+              if (data && data.error) message = data.error;
+            } catch (_) {}
+            throw new Error(message);
+          }
+          const blob = await res.blob();
+          const objectUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          const disposition = res.headers.get("Content-Disposition") || "";
+          const utf8Name = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+          const plainName = disposition.match(/filename=\"?([^\";]+)\"?/i);
+          const fallback = "志愿表.xlsx";
+          const filename = utf8Name ? decodeURIComponent(utf8Name[1]) : (plainName ? plainName[1] : fallback);
+          link.href = objectUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(objectUrl);
+        } catch (err) {
+          alert(err.message || "导出失败");
+        } finally {
+          exportBtn.textContent = originalText;
+          syncWishlistUi();
+        }
       }
 
       tierButtons.forEach((btn) => {
         btn.addEventListener("click", () => applyTierFilter(btn.dataset.tierFilter));
       });
+
+      checks.forEach((check) => {
+        check.addEventListener("change", syncWishlistUi);
+      });
+
+      if (checkAll) {
+        checkAll.addEventListener("change", () => {
+          visibleChecks().forEach((check) => {
+            check.checked = checkAll.checked;
+          });
+          syncWishlistUi();
+        });
+      }
+
+      if (selectVisibleBtn) {
+        selectVisibleBtn.addEventListener("click", () => {
+          visibleChecks().forEach((check) => {
+            check.checked = true;
+          });
+          syncWishlistUi();
+        });
+      }
+
+      if (exportBtn) {
+        exportBtn.addEventListener("click", exportSelectedRows);
+      }
+
       if (tierButtons.length && tierRows.length) applyTierFilter("全部");
+      else syncWishlistUi();
+
       if (shouldAutoScroll) {
         const anchor = document.getElementById("result-anchor");
         if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
